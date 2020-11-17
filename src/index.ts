@@ -15,9 +15,9 @@ const AWSConfig = {
 }
 
 const getSecretsManagerClient = (config): SecretsManager => new SecretsManager(config)
-const getSecretValue = (secretsManagerClient, secretName): Promise<object> =>
+const getSecretValue = (secretsManagerClient: SecretsManager, secretName: string) =>
   secretsManagerClient.getSecretValue({ SecretId: secretName }).promise()
-const listSecretsPaginated = (secretsManagerClient, nextToken): Promise<object> =>
+const listSecretsPaginated = (secretsManagerClient, nextToken) =>
   secretsManagerClient.listSecrets({ NextToken: nextToken }).promise()
 
 const listSecrets = (secretsManagerClient: SecretsManager): Promise<Array<string>> => {
@@ -49,9 +49,8 @@ const listSecrets = (secretsManagerClient: SecretsManager): Promise<Array<string
   })
 }
 
-const getSecretValueMap = (secretsManagerClient: SecretsManager,
-  secretName: string, shouldParseJSON = false): Promise<object> => {
-  return new Promise<object>((resolve, reject) => {
+const getSecretValueMap = (secretsManagerClient: SecretsManager, secretName: string, shouldParseJSON = false) => {
+  return new Promise((resolve, reject) => {
     getSecretValue(secretsManagerClient, secretName)
       .then(data => {
         let secretValue
@@ -60,7 +59,7 @@ const getSecretValueMap = (secretsManagerClient: SecretsManager,
         if ('SecretString' in data) {
           secretValue = data['SecretString']
         } else {
-          const buff = Buffer.from(data['SecretBinary'])
+          const buff = Buffer.from(data['SecretBinary'].toString(), 'base64')
           secretValue = buff.toString('ascii')
         }
         let secretValueMap = {}
@@ -129,21 +128,24 @@ const getSecretNamesToFetch =
     })
   }
 
-const injectSecretValueMapToEnvironment = (secretValueMap: object, core): void => {
+const injectSecretValueMapToEnvironment = (secretValueMap: Record<string, any>,
+  core: typeof import('@actions/core')): void => {
   for (const secretName in secretValueMap) {
-    const secretValue = secretValueMap[secretName]
+    const secretValue: string = secretValueMap[secretName]
     core.setSecret(secretValue)
     // If secretName contains non-posix characters, it can't be read by the shell
     // Get POSIX compliant name secondary env name that can be read by the shell
     const secretNamePOSIX = getPOSIXString(secretName)
     if (secretName !== secretNamePOSIX) {
-      const part1 = `Secret name '${secretName}' is not POSIX compliant. `
-      const part2 = `It will be changed to '${secretNamePOSIX}'.\n\n`
-      const part3 = 'POSIX compliance: environment variable names can only contain upper case letters, '
-      const part4 = 'digits and underscores. It cannot begin with a digit.'
-      core.warning(part1.concat(part2).concat(part3).concat(part4))
+      core.warning('One of the secrets has a name that is not POSIX compliant and hence cannot directly \
+be used/injected as an environment variable name. Therefore, it will be transformed into a POSIX compliant \
+environment variable name. Enable GitHub Actions Debug Logging \
+(https://docs.github.com/en/free-pro-team@latest/actions/managing-workflow-runs/enabling-debug-logging) to \
+see the transformed environment variable name.\nPOSIX compliance: environment variable names can only contain \
+upper case letters, digits and underscores. It cannot begin with a digit.')
+      core.debug(`Secret name '${secretName}' is not POSIX compliant. It will be transformed to '${secretNamePOSIX}'.`)
     }
-    core.debug(`Injecting secret: ${secretNamePOSIX} = ${secretValue}`)
+    core.debug(`Injecting environment variable '${secretNamePOSIX}'.`)
     core.exportVariable(secretNamePOSIX, secretValue)
   }
 }

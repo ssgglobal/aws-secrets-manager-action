@@ -1,21 +1,19 @@
 import { getSecretValue, listSecrets, getSecretValueMap, getSecretNamesToFetch } from '../src/index'
+import { getPOSIXString } from '../src/utils'
 import { SecretsManager } from 'aws-sdk'
 import { Inputs } from '../src/constants'
 import { resolve } from "path"
 import { config } from "dotenv"
 
+jest.mock('aws-sdk')
+
 config({ path: resolve(__dirname, "../.env") })
 
-/* Secrets on AWS Secrets Manager:
-* my_secret_1 = 'test-value-1'
-* my_secret_2 = '{"foo" : "bar"}'
-* my/secret/3 = 'eyJmb28iIDogImJhciJ9' (Base64 secret binary)
-*/
-
+// In case we want to make actual AWS calls during integration tests instead of jest mock calls
 const AWSConfig = {
-  accessKeyId: process.env[Inputs.AWS_ACCESS_KEY_ID],
-  secretAccessKey: process.env[Inputs.AWS_SECRET_ACCESS_KEY],
-  region: process.env[Inputs.AWS_REGION]
+  accessKeyId: process.env[getPOSIXString(Inputs.AWS_ACCESS_KEY_ID)],
+  secretAccessKey: process.env[getPOSIXString(Inputs.AWS_SECRET_ACCESS_KEY)],
+  region: process.env[getPOSIXString(Inputs.AWS_REGION)]
 }
 
 const secretsManagerClient = new SecretsManager(AWSConfig)
@@ -40,7 +38,7 @@ test('Fetch Secret Value: Invalid Secret Name', () => {
 test('List Secrets', () => {
   expect.assertions(1)
   return listSecrets(secretsManagerClient).then(secretNames => {
-    expect(secretNames).toEqual(expect.arrayContaining(['my_secret_1', 'my_secret_2', 'my/secret/3']))
+    expect(secretNames.sort()).toEqual(['my_secret_1', 'my_secret_2', 'my/secret/3'].sort())
   })
 })
 
@@ -89,13 +87,13 @@ test('Get Secret Value Map: Invalid Secret Name', () => {
 test('Get Secret Names To Fetch: Single Wild Card Name', () => {
   expect.assertions(1)
   return getSecretNamesToFetch(secretsManagerClient, ['*secret*']).then(secretNames => {
-    expect(secretNames).toEqual(expect.arrayContaining(['my_secret_1', 'my_secret_2', 'my/secret/3']))
+    expect(secretNames.sort()).toEqual(['my_secret_1', 'my_secret_2', 'my/secret/3'].sort())
   })
 })
 
 test('Get Secret Names To Fetch: Multiple Wild Card Names', () => {
   expect.assertions(1)
   return getSecretNamesToFetch(secretsManagerClient, ['my*', 'my_secret*', 'invalidfoobarbaz']).then(secretNames => {
-    expect(secretNames).toEqual(expect.arrayContaining(['my_secret_1', 'my_secret_2', 'my/secret/3']))
+    expect(secretNames.sort()).toEqual(['my_secret_1', 'my_secret_2', 'my/secret/3'].sort())
   })
 })
